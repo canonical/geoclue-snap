@@ -1,0 +1,113 @@
+name: geoclue
+base: core26
+adopt-info: geoclue
+summary: Geolocation service daemon (org.freedesktop.GeoClue2) as a provider snap
+description: |
+  The geoclue system daemon (org.freedesktop.GeoClue2) packaged as a
+  provider snap for Ubuntu Core Desktop, restoring the fat base's
+  location functionality. Staged from the same resolute geoclue-2.0
+  (2.7.2) build the fat base shipped (the staged daemon is
+  byte-identical to the fat tree's /usr/libexec/geoclue).
+
+  The daemon is strictly confined: its slot policy lives in the snapd
+  fork's `geoclue` interface (peer-less dbus receive rules, the
+  wpa_supplicant/ModemManager/Avahi data-source sends, the network
+  sockets the NMEA listener and GeoIP lookups use); the plain `dbus`
+  slot provides activation and name ownership; session clients (the
+  shell's location indicator and agent, libgeoclue apps) connect
+  through the `geoclue` interface's plug. libgeoclue-2-0 itself keeps
+  living in the content snap for client apps.
+
+  base is plain core26: the daemon execs no host helpers, its config
+  ships in the snap (/etc/geoclue layout), and everything it links is
+  staged with the deb or in the base.
+
+  BEHAVIOR DELTA vs the fat base (inherent to the snap machinery,
+  not silently changed): snapd's dbus activation entries hardcode
+  User=root, so the daemon runs as the root user (confined) instead
+  of the fat base's geoclue user (uid 203, still baked in the
+  desktop variant). All data-source access is mediated by the
+  interface policy either way.
+
+grade: stable
+confinement: strict
+
+slots:
+  # Activation + name ownership: snapd writes the
+  # /var/lib/snapd/dbus-1/system-services entry and the /etc/dbus-1/system.d
+  # conf (root may own org.freedesktop.GeoClue2) for this slot; the app
+  # activates on it.
+  geoclue-dbus:
+    interface: dbus
+    bus: system
+    name: org.freedesktop.GeoClue2
+  # Interface-specific policy slot (config, data-source dbus sends and
+  # network sockets, dbus receive), defined in the snapd fork.
+  geoclue:
+    interface: geoclue
+
+apps:
+  geoclue:
+    command: usr/libexec/geoclue
+    daemon: dbus
+    daemon-scope: system
+    activates-on:
+      - geoclue-dbus
+    # GeoIP lookups over HTTP (libsoup), the network-NMEA UDP listener
+    # and DNS all need plain network access
+    plugs:
+      - network
+    slots:
+      - geoclue
+    # same environment the fat base's baked geoclue.service set
+    environment:
+      GSETTINGS_BACKEND: memory
+
+layout:
+  # The daemon reads its config at the compiled-in /etc/geoclue path
+  # (geoclue.conf + conf.d/ drop-ins). The desktop variant bakes NO
+  # geoclue config, so the snap ships the fat base's own
+  # /etc/geoclue/geoclue.conf (staged from the resolute deb, which is
+  # the same build the fat base used) and binds the directory over the
+  # base's missing path. A directory layout works where a file layout
+  # would not (snapcraft's post-prime only creates directory
+  # mountpoints — the /etc/fprintd.conf lesson).
+  /etc/geoclue:
+    bind: $SNAP/etc/geoclue
+
+parts:
+  geoclue:
+    plugin: nil
+    stage-packages:
+      - geoclue-2.0
+    override-build: |
+      craftctl default
+      deb_dir="/root/parts/geoclue/stage_packages"
+      craftctl set version="$(dpkg-deb -f "$deb_dir"/geoclue-2.0_*.deb Version)"
+    stage:
+      - -usr/share/doc
+      - -usr/share/man
+      - -usr/share/lintian
+      # the deb's activation entry, dbus policy confs, systemd unit and
+      # polkit rules are superseded by snapd's own machinery (they also
+      # stay inert inside the snap; drop them so nothing can mistake
+      # this snap for a host-side service provider)
+      - -usr/lib/systemd/system/geoclue.service
+      - -usr/share/dbus-1/system-services
+      - -usr/share/dbus-1/system.d
+      - -usr/share/polkit-1/rules.d
+      # the demo agent is DISABLED on the fat base
+      # (core-base-desktop commit e140d44: NotShowIn=GNOME +
+      # NoDisplay=true) and stays unshipped here, per the fat base:
+      # gnome-shell is the real agent. Its autostart and desktop
+      # entries go with it.
+      - -usr/libexec/geoclue-2.0
+      - -usr/share/applications/geoclue-demo-agent.desktop
+      - -etc/xdg/autostart/geoclue-demo-agent.desktop
+      # upstream's host AppArmor profile is meaningless inside a snap
+      - -etc/apparmor.d
+      # libgeoclue-2-0 (client library) is pulled transitively but is
+      # NOT this daemon's dependency: clients (libgeoclue apps) link it
+      # from the content snap
+      - -usr/lib/x86_64-linux-gnu/libgeoclue-2.so*
+      - -usr/lib/x86_64-linux-gnu/girepository-1.0/Geoclue-2.0.typelib

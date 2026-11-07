@@ -1,0 +1,5 @@
+*.snap
+build.log
+prime/
+stage/
+parts/
