@@ -11,7 +11,17 @@ permissions:
 
 jobs:
   snap:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runs-on: ubuntu-latest
+            suffix: ""
+          - arch: arm64
+            runs-on: ubuntu-24.04-arm
+            suffix: "-arm64"
+    runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
       - uses: snapcore/action-build@v1
@@ -19,7 +29,7 @@ jobs:
         with:
           snapcraft-channel: edge
       - name: Normalize snap filename
-        run: cp "${{ steps.snapcraft.outputs.snap }}" geoclue.snap
+        run: cp "${{ steps.snapcraft.outputs.snap }}" geoclue${{ matrix.suffix }}.snap
       - name: Publish to desktop-26-latest release
         if: github.event_name != 'pull_request'
         env:
@@ -29,10 +39,10 @@ jobs:
             || gh release create desktop-26-latest -R "$GITHUB_REPOSITORY" \
                  --title "desktop/26 latest snap" \
                  --notes "Rolling latest main snap build; assets are replaced on every green build."
-          gh release upload desktop-26-latest geoclue.snap -R "$GITHUB_REPOSITORY" --clobber
+          gh release upload desktop-26-latest geoclue${{ matrix.suffix }}.snap -R "$GITHUB_REPOSITORY" --clobber
       - uses: actions/upload-artifact@v4
         with:
-          name: snap
-          path: geoclue.snap
+          name: snap${{ matrix.suffix }}
+          path: geoclue${{ matrix.suffix }}.snap
           compression-level: 0
           retention-days: 14
