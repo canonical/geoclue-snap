@@ -23,7 +23,7 @@ jobs:
             suffix: "-arm64"
     runs-on: ${{ matrix.runs-on }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: snapcore/action-build@v1
         id: snapcraft
         with:
@@ -40,7 +40,7 @@ jobs:
                  --title "desktop/26 latest snap" \
                  --notes "Rolling latest main snap build; assets are replaced on every green build."
           gh release upload desktop-26-latest geoclue${{ matrix.suffix }}.snap -R "$GITHUB_REPOSITORY" --clobber
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: snap${{ matrix.suffix }}
           path: geoclue${{ matrix.suffix }}.snap
